@@ -1,50 +1,39 @@
-import streamlit as st
 import pandas as pd
-import statsmodels.api as sm
+import numpy as np
+import streamlit as st
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-import matplotlib.pyplot as plt
-from sklearn.metrics import mean_squared_error
 
-# Title of the app
-st.title('ARIMAX Model for Forecasting Monthly Expenses')
+# Load data
+data = pd.read_csv('data.csv', parse_dates=['date'], index_col='date')
 
-# Load the data
-@st.cache
-def load_data():
-    data = pd.read_csv('data set for python.csv', parse_dates=['Date'], index_col='Date')
-    return data
+# Define the ARIMAX model
+model = SARIMAX(data['expenses'], exog=data[['cpi', 'gdp_growth']], order=(1, 1, 1), seasonal_order=(1, 1, 1, 12))
+results = model.fit()
 
-data = load_data()
+# Streamlit app
+st.title('ARIMAX Model for Forecasting Expenses')
+st.write('Model Summary:')
+st.write(results.summary())
 
-# Display the data
-st.write("### Data Preview")
-st.write(data.head())
+# Forecast
+forecast_steps = st.slider('Forecast steps:', 1, 12, 3)
+forecast = results.get_forecast(steps=forecast_steps, exog=data[['cpi', 'gdp_growth']].iloc[-forecast_steps:])
+forecast_df = forecast.summary_frame()
 
-# Split the data into training and testing sets
-train_size = int(len(data) * 0.8)
-train, test = data[:train_size], data[train_size:]
+st.write('Forecasted Expenses:')
+st.write(forecast_df)
 
-# Fit the ARIMAX model
-model = SARIMAX(train['Monthly_Expenses'], 
-                exog=train[['GDP_Growth', 'CPI']], 
-                order=(1, 1, 1), 
-                seasonal_order=(0, 0, 0, 0))
-model_fit = model.fit(disp=False)
+# Allow user to change estimates
+new_cpi = st.number_input('New CPI:', value=data['cpi'].iloc[-1])
+new_gdp_growth = st.number_input('New GDP Growth:', value=data['gdp_growth'].iloc[-1])
+new_data = pd.DataFrame({'cpi': [new_cpi], 'gdp_growth': [new_gdp_growth]})
 
-# Make predictions
-predictions = model_fit.predict(start=len(train), 
-                                end=len(train) + len(test) - 1, 
-                                exog=test[['GDP_Growth', 'CPI']])
+new_forecast = results.get_forecast(steps=1, exog=new_data)
+new_forecast_df = new_forecast.summary_frame()
 
-# Evaluate the model
-mse = mean_squared_error(test['Monthly_Expenses'], predictions)
-st.write(f'Mean Squared Error: {mse}')
+st.write('New Forecasted Expense:')
+st.write(new_forecast_df)
 
-# Plot the results
-fig, ax = plt.subplots(figsize=(10, 6))
-ax.plot(train.index, train['Monthly_Expenses'], label='Train')
-ax.plot(test.index, test['Monthly_Expenses'], label='Test')
-ax.plot(test.index, predictions, label='Predictions', color='red')
-ax.legend()
-st.pyplot(fig)
+
+
 
